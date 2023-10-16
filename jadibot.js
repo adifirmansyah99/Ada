@@ -1,20 +1,24 @@
-require(`./config.js`)
-const { default: makeWASocket, DisconnectReason, downloadContentFromMessage, useSingleFileAuthState, jidDecode, areJidsSameUser, makeInMemoryStore } = require('@adiwajshing/baileys')
-const { state } = useSingleFileAuthState('./session.json')
-const PhoneNumber = require('awesome-phonenumber')
-const fs = require('fs')
-const pino = require('pino')
-const FileType = require('file-type')
-const { Boom } = require('@hapi/boom')
-const { smsg } = require('./myfunc')
-const { imageToWebp, videoToWebp, writeExifImg, writeExifVid } = require('./exif')
-const chalk = require('chalk')
+const { modul } = require("./module");
+const { baileys, boom, chalk, fs, FileType, path, process, PhoneNumber } = modul;
+const { Boom } = boom
+const { default: makeWaSocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion, generateForwardMessageContent, generateWAMessage, prepareWAMessageMedia, generateWAMessageFromContent, generateMessageID, downloadContentFromMessage, makeInMemoryStore, jidDecode, proto } = baileys
 const color = (text, color) => { return !color ? chalk.green(text) : chalk.keyword(color)(text) }
+const log = (pino = require("pino"));
+const qrcode = require("qrcode");
+const { smsg } = require('./myfunc')
 const store = makeInMemoryStore({ logger: pino().child({ level: 'silent', stream: 'store' }) })
 
+if (global.conns instanceof Array) console.log()
+else global.conns = []
+
+const jadibot = async (client, msg, from) => {
+const { sendImage, sendMessage } = client;
+const { reply, sender } = msg;
+const { state } = useSingleFileAuthState(`./data/${from}.json`)
+
 const connectToWhatsApp = () => {
-const client = makeWASocket({ logger: pino ({ level: 'silent' }), printQRInTerminal: true, auth: state, browser: ["SC Simple Kona", "Dekstop", "3.0"]})
-console.log(color('[ SC BY Kona-XD ]\n', 'red'),color('\nInfo Script :\n➸ Baileys : Multi Device\n➸ Nama Script : Kona-PSH\n➸ Creator : Kona\n\nFollow My Social Media Account All Yes :\n➸ My Youtube : zuraoffc`\n➸ My Instagram : @raflyxxi_\n\nThanks\n', 'red'))
+const client = makeWaSocket({ logger: pino ({ level: 'silent' }), printQRInTerminal: true, auth: state, browser: ["SC Simple Kona-XD", "Dekstop", "3.0"]})
+console.log(color('[ SC BY Kona-PSH ]\n', 'red'),color('\nInfo Script :\n➸ Baileys : Multi Device\n➸ Nama Script : Kona-PSH\n➸ Creator : zuraoffc\n\nFollow My Social Media Account All Yes :\n➸ My Youtube : zuraoffc`\n➸ My Instagram : @zuraoffc\n\nDonase Me For Support :\n➸ DONASI : Nothing\n\nThanks\n', 'red'))
 
 store.bind(client.ev)
 
@@ -26,16 +30,31 @@ m.message = (Object.keys(m.message)[0] === 'ephemeralMessage') ? m.message.ephem
 if (!client.public && !m.key.fromMe && chatUpdate.type === 'notify') return
 if (m.key.id.startsWith('BAE5') && m.key.id.length === 16) return
 msg = smsg(client, m, store)
-require('./konamenu')(client, msg, chatUpdate, store)
+require('./kw')(client, msg, chatUpdate, store)
 } catch (err) {
 console.log(err)}})
 
-client.ev.on('connection.update', (update) => {
-const { connection, lastDisconnect } = update
-if (connection === 'close') { lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut ? connectToWhatsApp() : ''}
-else if (connection === 'open') {
-client.sendMessage(nomorOwner + "@s.whatsapp.net", {text:`${JSON.stringify(update, undefined, 2)}` + `\n\nBot WhatsApp By ` + namaDeveloper})}
-console.log(update)})
+client.ev.on("connection.update", async up => {
+const { lastDisconnect, connection } = up;
+if (connection == "connecting") return
+if (connection){
+if (connection != "connecting") console.log("Connecting to jadibot..")
+}
+console.log(up)
+if (up.qr) await sendImage(from, await qrcode.toDataURL(up.qr,{scale : 8}), 'Scan QR ini untuk jadi bot sementara\n\n1. Klik titik tiga di pojok kanan atas\n2. Ketuk WhatsApp Web\n3. Scan QR ini \nQR Expired dalam 30 detik', m)
+console.log(connection)
+if (connection == "open") {
+client.id = client.decodeJid(client.user.id)
+client.time = Date.now()
+global.conns.push(client)
+user = `${client.decodeJid(client.user.id)}`
+txt = `*Terdeteksi User Jadibot*\n\n _× User : @${user.split("@")[0]}_`
+sendMessage(`6281228070013@s.whatsapp.net`,{text: txt, mentions : [user]})
+}
+if (connection === 'close') {
+lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut ? connectToWhatsApp() : ''
+}
+})
 
 client.decodeJid = (jid) => {
 if (!jid) return jid
@@ -101,20 +120,8 @@ return buffer
 const { getImg } = require('./functions')
 
 client.sendImage = async (jid, path, caption = '', quoted = '', options) => {
-let buffer = Buffer.isBuffer(path) ? path : /^data:.*?\/.*?;base64,/i.test(path) ? Buffer.from(path.split`,`[1], 'base64') : /^https?:\/\//.test(path) ? await (await getImg(path)) : fs.existsSync(path) ? fs.readFileSync(path) : Buffer.alloc(0)
+let buffer = Buffer.isBuffer(path) ? path : /^data:.*?\/.*?;base64,/i.test(path) ? Buffer.from(path.split`,`[1], 'base64') : /^https?:\/\//.test(path) ? await (await getBuffer(path)) : fs.existsSync(path) ? fs.readFileSync(path) : Buffer.alloc(0)
 return await client.sendMessage(jid, { image: buffer, caption: caption, ...options }, { quoted })
-}
-
-client.sendImageAsSticker = async (jid, path, quoted, options = {}) => {
-let buff = Buffer.isBuffer(path) ? path : /^data:.*?\/.*?;base64,/i.test(path) ? Buffer.from(path.split`,`[1], 'base64') : /^https?:\/\//.test(path) ? await (await getImg(path)) : fs.existsSync(path) ? fs.readFileSync(path) : Buffer.alloc(0)
-let buffer
-if (options && (options.packname || options.author)) {
-buffer = await writeExifImg(buff, options)
-} else {
-buffer = await imageToWebp(buff)
-}
-await client.sendMessage(jid, { sticker: { url: buffer }, ...options }, { quoted })
-return buffer
 }
 
 client.sendButMessage = (jid, buttons = [], text, footer, quoted = '', options = {}) => {
@@ -129,5 +136,15 @@ client.sendMessage(jid, buttonMessage, { quoted, ...options })
 }
 
 }
-
 connectToWhatsApp()
+}
+
+module.exports = { jadibot, conns }
+
+let file = require.resolve(__filename)
+fs.watchFile(file, () => {
+    fs.unwatchFile(file)
+    console.log(chalk.redBright(`Update ${__filename}`))
+    delete require.cache[file]
+    require(file)
+})
